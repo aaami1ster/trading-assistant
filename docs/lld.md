@@ -2,7 +2,7 @@
 
 Checked against `docs/Weekend Interview Prep — Senior SWE, AI & Cloud (GCP).pdf`, pages 11–18, on 31 Oct 2026. Project `trading-assistant-abdalla`. Repo: https://github.com/aaami1ster/trading-assistant.
 
-The brief’s definition of done is a FastAPI + React app on Cloud Run that answers from trading documents and calls tools, deployed by Cloud Build on every Git push. Backend, Cloud Run, CI/CD, and RAG are in place. The React page and `POST /v1/agent` are not.
+The brief’s definition of done is a FastAPI + React app on Cloud Run that answers from trading documents and calls tools, deployed by Cloud Build on every Git push. The API, documents, agent route, and chat page are in the repo. The chat page reaches Cloud Run on the next push.
 
 ## Region
 
@@ -12,8 +12,9 @@ The brief uses `me-central2` (Dammam). This account cannot create resources ther
 
 | Piece | Value |
 | --- | --- |
-| Service | `rag-api` in `me-central1`, public |
+| Service | `rag-api` in `me-central1`, public. `rag-api-dev` from the `dev` branch, also public |
 | URL | https://rag-api-431360356117.me-central1.run.app |
+| Dev URL | https://rag-api-dev-dzyappblea-ww.a.run.app (`rag-api-dev-00001-kqh`, commit `a93427c`) |
 | Runtime service account | `rag-api-sa@trading-assistant-abdalla.iam.gserviceaccount.com` (`roles/aiplatform.user`, object viewer on the docs bucket) |
 | Builder service account | `rag-builder@trading-assistant-abdalla.iam.gserviceaccount.com` (Logs Writer, Cloud Run admin, Service Account User, Artifact Registry writer on `apps`) |
 | Image | `me-central1-docker.pkg.dev/trading-assistant-abdalla/apps/rag-api:$SHORT_SHA` |
@@ -73,7 +74,7 @@ Pushing a new note to `main` deploys a new revision, which reloads the bucket. U
 3. Push to `apps`.
 4. `gcloud run deploy` of `_SERVICE` in `me-central1`, as `rag-api-sa`, with `GOOGLE_CLOUD_PROJECT` set, `--allow-unauthenticated`.
 
-There is no `dev` branch yet, so `rag-api-dev` has not been deployed.
+`origin/dev` is deployed. The trigger built commit `a93427c` into `rag-api-dev`.
 
 ## Status against the brief
 
@@ -82,20 +83,19 @@ There is no `dev` branch yet, so `rag-api-dev` has not been deployed.
 | 1. Project, APIs, Artifact Registry | Done in `me-central1`. Dammam is unavailable. |
 | 2. FastAPI, health test, container | Done. Packaging is uv (`pyproject.toml`, `uv.lock`), not `requirements.txt`. Image is `ghcr.io/astral-sh/uv`, non-root, listens on `$PORT`. |
 | 3. Cloud Run and `rag-api-sa` | Done. Public URL above. |
-| 4. Cloud Build triggers | Done for `main` and `dev`. Only `main` has been built. |
-| 5. React chat page and CORS | Not started. `web/` is the Vite starter. |
+| 4. Cloud Build triggers | Done. `main` deploys `rag-api` and `rag-web`. `dev` deploys `rag-api-dev` and `rag-web-dev`. |
+| 5. React chat page and CORS | Chat page is in `web/`. Vite proxies `/v1` locally. API allows `localhost:5173` and `https://rag-web…run.app`. The web Cloud Run service is created on the next pipeline run. |
 | 6. RAG over Cloud Storage | Done. Four sample files, loaded at startup. |
-| 7. Agent route | `api/agent.py` matches the brief. `get_price` and `calc_exposure` are not exposed. No `POST /v1/agent`. ADK is not started. |
-| 8. Terraform plan | `infra/main.tf` matches the resources, with region `me-central1`. `var.project` and `var.image` are undeclared, so `terraform plan` fails. The bucket and Cloud Run service were created with `gcloud`, not Terraform. |
-| README | Empty. |
+| 7. Agent route | `POST /v1/agent` returns `{ "answer" }` from `run_agent`. ADK is not started. |
+| 8. Terraform plan | `infra/variables.tf` declares `project` and `image`. Resources are one attribute per line, region `me-central1`. State is empty, so a plan proposes resources that `gcloud` already created. Do not apply that plan without importing them. |
+| README | `README.md` has the URLs, both paths, and the decisions. |
 
 ## Still to do
 
-1. **`POST /v1/agent`.** Body `{ "question": string }`, return `run_agent`. Check with: “What is our USD exposure on a 500,000 barrel Brent cargo?” The model should call `get_price` then `calc_exposure`. The prices in `agent.py` are demo numbers. The desk policy says not to treat them as Platts or Argus.
-2. **Chat page.** Textarea, Ask, answer, and the source list. `fetch` to `/v1/ask`. CORS for that origin. Second Cloud Run service or static files from FastAPI.
-3. **`dev` branch.** Push it once so `rag-api-dev` exists.
-4. **Terraform variables** `project` and `image`, one attribute per line, then `terraform plan`. Apply is not required. Explain remote state in a GCS bucket.
-5. **README** with the URL, the two diagrams above, and the decisions below.
+The four checklist items are in the repo. What is not live yet:
+
+1. Push `main` so Cloud Build deploys `rag-web` and the API revision that includes `POST /v1/agent` and CORS. A push to `dev` deploys `rag-web-dev` because the pipeline chooses the web service from `_SERVICE`.
+2. ADK remains a stretch and is not started.
 
 ## Run locally
 
@@ -107,13 +107,17 @@ uv sync
 uv run uvicorn main:app --reload --host 127.0.0.1 --port 8080
 ```
 
-`.env` at the repo root sets `GOOGLE_CLOUD_PROJECT` and `MODEL`. Startup reads the same bucket as Cloud Run, using your user credentials. `uv run pytest` only checks `/health` and skips the bucket.
+`.env` at the repo root sets `GOOGLE_CLOUD_PROJECT` and `MODEL`. Startup reads the same bucket as Cloud Run, using your user credentials. `uv run pytest` checks `/health` and a blank agent question, and skips the bucket.
 
-Until the agent route exists:
+The chat page is `cd web && npm run dev`. Vite proxies `/v1` to port 8080. The same routes work with curl:
 
 ```bash
-cd api
-uv run python -c 'from agent import run_agent; print(run_agent("What is our USD exposure on a 500,000 barrel Brent cargo?"))'
+curl -s http://127.0.0.1:8080/v1/ask \
+  -H 'content-type: application/json' \
+  -d '{"question":"What is the Brent position limit per trader?"}'
+curl -s http://127.0.0.1:8080/v1/agent \
+  -H 'content-type: application/json' \
+  -d '{"question":"What is our USD exposure on a 500,000 barrel Brent cargo?"}'
 ```
 
 ## Decisions to say out loud

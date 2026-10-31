@@ -2,6 +2,8 @@ substitutions:
   _REGION: me-central1
   _SERVICE: rag-api
   _IMAGE: me-central1-docker.pkg.dev/${PROJECT_ID}/apps/rag-api
+  _WEB_IMAGE: me-central1-docker.pkg.dev/${PROJECT_ID}/apps/rag-web
+  _API_URL: https://rag-api-431360356117.me-central1.run.app
 steps:
   - id: test
     name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
@@ -32,7 +34,35 @@ steps:
       - --set-env-vars
       - GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
       - --allow-unauthenticated
+  - id: build-web
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        if [ "${_SERVICE}" = "rag-api-dev" ]; then
+          API_URL="https://rag-api-dev-dzyappblea-ww.a.run.app"
+          echo rag-web-dev > /workspace/web_service.txt
+        else
+          API_URL="${_API_URL}"
+          echo rag-web > /workspace/web_service.txt
+        fi
+        docker build -t "${_WEB_IMAGE}:${SHORT_SHA}" --build-arg "VITE_API_URL=$${API_URL}" web
+  - id: push-web
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "${_WEB_IMAGE}:${SHORT_SHA}"]
+  - id: deploy-web
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        gcloud run deploy "$$(cat /workspace/web_service.txt)" \
+          --image "${_WEB_IMAGE}:${SHORT_SHA}" \
+          --region "${_REGION}" \
+          --allow-unauthenticated
 images:
   - ${_IMAGE}:${SHORT_SHA}
+  - ${_WEB_IMAGE}:${SHORT_SHA}
 options:
   logging: CLOUD_LOGGING_ONLY

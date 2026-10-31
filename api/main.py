@@ -6,6 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 
@@ -26,6 +27,19 @@ async def lifespan(_app: FastAPI):
     yield
 
 app = FastAPI(title="Trading Desk Assistant", version="1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173"
+        ).split(",")
+        if origin.strip()
+    ],
+    allow_origin_regex=r"https://rag-web[a-z0-9-]*\.(me-central1|a)\.run\.app",
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["content-type"],
+)
 client = genai.Client(vertexai=True, project=os.environ["GOOGLE_CLOUD_PROJECT"], location="global")
 MODEL = os.getenv("MODEL", "gemini-3.5-flash")  # check exact ID in the model list
 
@@ -35,6 +49,9 @@ class AskIn(BaseModel):
 class AskOut(BaseModel):
     answer: str
     sources: list[str] = []
+
+class AgentOut(BaseModel):
+    answer: str
 
 @app.get("/health")
 def health():
@@ -52,3 +69,10 @@ def ask(body: AskIn):
               f"Context:\n{context}\n\nQuestion: {body.question}")
     resp = client.models.generate_content(model=MODEL, contents=prompt)
     return AskOut(answer=resp.text, sources=sorted({c["source"] for c in chunks}))
+
+@app.post("/v1/agent", response_model=AgentOut)
+def ask_agent(body: AskIn):
+    if not body.question.strip():
+        raise HTTPException(422, "empty question")
+    from agent import run_agent
+    return AgentOut(answer=run_agent(body.question))
