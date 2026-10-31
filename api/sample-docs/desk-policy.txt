@@ -1,0 +1,9 @@
+Trading desk policy. This document is fictional and is for the assistant demo only.
+
+Each trader may hold at most 50,000 barrels of outright Brent. The whole desk may hold at most 200,000 barrels of outright Brent. WTI and Dubai limits are 30,000 barrels per trader and 100,000 barrels for the desk.
+
+A physical cargo is 500,000 barrels. No cargo may be fixed unless the contract states a laycan window and an Incoterm with a named port.
+
+If the mark-to-market loss on one physical cargo exceeds 250,000 US dollars, the trader must hedge or flatten that cargo on the same business day and tell the middle office before the close.
+
+The assistant may explain this policy and quote the source file. It must not invent prices, limits, or cargo status. Live marks come from the ETRM, not from this note. Prices returned by the demo price tool are sample numbers and are not Platts or Argus assessments.

@@ -1,0 +1,7 @@
+Crude benchmark note for questions about Brent, WTI, and Dubai.
+
+The desk trades three benchmarks: Brent, WTI, and Dubai. Brent cargoes in this book load in the North Sea and are hedged with Brent swaps. WTI cargoes price off Cushing. Dubai cargoes price off the Dubai swap and are the sour barrel for Gulf sales.
+
+A standard cargo on this desk is 500,000 barrels. USD exposure of a cargo equals volume in barrels times the benchmark price in US dollars per barrel. Example from this note, using a teaching price of 80 dollars per barrel: 500,000 barrels times 80 dollars is 40,000,000 US dollars of cargo value. Replace 80 with the price from the risk system before using the figure in a deal.
+
+Do not use a demo or sample price as the official mark. The official mark is the ETRM price for that benchmark on the trade date.

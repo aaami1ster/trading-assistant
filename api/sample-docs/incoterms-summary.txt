@@ -1,0 +1,11 @@
+Incoterms summary used by the crude desk. This is a teaching summary of Incoterms 2020, not legal advice.
+
+FOB means Free On Board. The seller delivers when the oil passes the ship's rail at the named load port, and the buyer pays freight and insurance after that. The desk's usual FOB grade is FOB Ras Tanura.
+
+CFR means Cost and Freight. The seller pays freight to the named discharge port, and the buyer arranges insurance. The desk's usual CFR grade is CFR Rotterdam.
+
+CIF means Cost, Insurance and Freight. The seller pays freight and minimum cargo insurance to the named discharge port. Risk still passes at the load port, when the oil is on board. The desk's usual CIF grade is CIF Fujairah.
+
+DAP means Delivered at Place. The seller bears risk until the cargo is ready for unloading at the named place. The desk does not use DAP for crude.
+
+For every physical fixture the contract must name the Incoterm and the port in the same phrase, for example "CIF Fujairah" or "FOB Ras Tanura". A cargo confirmed with no Incoterm is not a valid deal.

@@ -1,0 +1,11 @@
+Commodity glossary for the trading desk. This is a study note, not a market-data feed.
+
+A barrel (bbl) is 42 US gallons. Crude oil cargoes in this desk's book are quoted in barrels, not tonnes.
+
+Brent is a light sweet North Sea crude and the desk's main international benchmark. WTI is West Texas Intermediate, the US light sweet benchmark, delivered at Cushing. Dubai is the medium sour Middle East benchmark used for Gulf cargoes. Oman is often traded as a pair with Dubai.
+
+A cargo is one physical shipment, usually 500,000 barrels for this desk. A nomination is the notice that names the vessel and the loading dates. Laycan is the laydays and cancelling window: the range of dates when the vessel must arrive for loading.
+
+Exposure is how many barrels the desk is long or short of a benchmark. Mark-to-market (MtM) values an open cargo at today's benchmark price. A hedge is an opposite paper position, such as a Brent swap, taken to reduce price risk on a physical cargo.
+
+The system of record for deals is the ETRM. This assistant only explains the notes in the document bucket. It does not book trades.
