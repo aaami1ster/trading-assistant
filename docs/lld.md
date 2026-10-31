@@ -1,158 +1,128 @@
-# Trading Desk Assistant — check against the weekend brief
+# Trading Desk Assistant — low-level design
 
-Source: `docs/Weekend Interview Prep — Senior SWE, AI & Cloud (GCP).pdf`, pages 11–18, “Hands-on project: Trading Desk Assistant” (31 Oct 2026). The Claude artifact link is the same brief. This file is the gap check of the repo and of project `trading-assistant-abdalla` against those eight steps.
+Checked against `docs/Weekend Interview Prep — Senior SWE, AI & Cloud (GCP).pdf`, pages 11–18, on 31 Oct 2026. Project `trading-assistant-abdalla`. Repo: https://github.com/aaami1ster/trading-assistant.
 
-Definition of done in the brief: a FastAPI + React app on Cloud Run that answers from trading documents (RAG) and calls tools (agent), deployed by Cloud Build on every Git push. In the interview, show the HTTPS URL and the repo.
+The brief’s definition of done is a FastAPI + React app on Cloud Run that answers from trading documents and calls tools, deployed by Cloud Build on every Git push. Backend, Cloud Run, CI/CD, and RAG are in place. The React page and `POST /v1/agent` are not.
 
-## Status
+## Region
 
-| Step | Brief | Repo / GCP now |
-| --- | --- | --- |
-| 1. Setup | Project, APIs, Artifact Registry `apps` in `me-central2` | Project exists. APIs are enabled. Testing region is **`me-central1`** (Doha): this account cannot create resources in `me-central2`. Docker repo `apps` is already there. |
-| 2. FastAPI | `main.py`, health test, slim Dockerfile, `requirements.txt` | `main.py` and `tests/test_api.py` match the brief, plus dotenv loading. Packaging is uv (`pyproject.toml`, `uv.lock`). The image is `ghcr.io/astral-sh/uv`, still non-root, and still uses `$PORT`. |
-| 3. Cloud Run | Service account `rag-api-sa`, `roles/aiplatform.user`, `gcloud run deploy rag-api` | Deployed. `rag-api-sa` has `roles/aiplatform.user`. Service URL `https://rag-api-431360356117.me-central1.run.app`. |
-| 4. CI/CD | `cloudbuild.yaml`: test → build → push → deploy. Trigger on `main`. Second trigger for `rag-api-dev`. | `cloudbuild.yaml` tests with uv and deploys `${_SERVICE}` (default `rag-api`). Cloud Build SA has `roles/run.admin` and `roles/iam.serviceAccountUser`. Triggers `rag-api-main` (`^main$`) and `rag-api-dev` (`^dev$`, `_SERVICE=rag-api-dev`) are in `me-central1` on connection `trading-assistant-connection`. |
-| 5. React | One chat page: question, answer, sources. CORS. Second Cloud Run service or static files. | `web/` is the Vite starter. No ask UI, no CORS, not deployed. |
-| 6. RAG | `rag.py` as written, plus load 3–5 docs from the bucket at startup | `rag.py` matches the snippet. Nothing calls `add_document`. No docs, no bucket, no startup load. `google-cloud-storage` is a dependency and is unused. |
-| 7. Agent | `agent.py` as written, exposed as `POST /v1/agent` | `agent.py` matches. No route. ADK is a stretch and is not started. |
-| 8. Terraform | `infra/main.tf` as written; `terraform plan` is enough | Same resources as the snippet. Region is `me-central1` for this account. `var.project` and `var.image` are undeclared, so `terraform plan` fails. Not applied. |
-| README | How to run, architecture, decisions | `README.md` is empty. |
+The brief uses `me-central2` (Dammam). This account cannot create resources there (`LOCATION_POLICY_VIOLATED`). Everything below runs in `me-central1` (Doha). In the interview, Dammam is still the data-residency answer. Say this demo runs in Doha because Dammam was closed for the account.
 
-Code that already matches the brief and should stay: the `/health` and `/v1/ask` handlers, the chunk/embed/retrieve functions, and the two tools (`get_price`, `calc_exposure`) with the demo prices.
+## What is running
 
-## What is still missing, in weekend order
+| Piece | Value |
+| --- | --- |
+| Service | `rag-api` in `me-central1`, public |
+| URL | https://rag-api-431360356117.me-central1.run.app |
+| Runtime service account | `rag-api-sa@trading-assistant-abdalla.iam.gserviceaccount.com` (`roles/aiplatform.user`, object viewer on the docs bucket) |
+| Builder service account | `rag-builder@trading-assistant-abdalla.iam.gserviceaccount.com` (Logs Writer, Cloud Run admin, Service Account User, Artifact Registry writer on `apps`) |
+| Image | `me-central1-docker.pkg.dev/trading-assistant-abdalla/apps/rag-api:$SHORT_SHA` |
+| Docs bucket | `gs://trading-assistant-abdalla-docs` in `me-central1` |
+| GitHub connection | `trading-assistant-connection` in `me-central1`, repo resource `trading-assistant` |
+| Triggers | `rag-api-main` on `^main$` deploys `rag-api`. `rag-api-dev` on `^dev$` sets `_SERVICE=rag-api-dev` |
 
-Do these in order if time is short. The brief’s minimum weekend is steps 2, 3, 4, and 6 (backend, Cloud Run, CI/CD, RAG). The React page and the agent route are what make the demo match the 60-second script.
+A regional trigger cannot use the Google-managed Cloud Build account. Both triggers set `build.service_account` to `rag-builder`. The Cloud Build service agent has Service Account User on `rag-builder` so it can start the build. Logs are `CLOUD_LOGGING_ONLY`. Open a build that ran after Logs Writer was granted. Earlier builds have an empty log panel.
 
-1. **Test in `me-central1`.** Creating `apps` in `me-central2` returned `LOCATION_POLICY_VIOLATED` for this account. The Docker repo `apps` stays in Doha. Terraform, Cloud Run, and the bucket use `me-central1` to match it. In the interview, Dammam (`me-central2`) is still the data-residency answer; say this account could not open that region, so the demo runs in `me-central1`.
-2. **Test in Cloud Build with uv.** From `api/`: `uv run --frozen pytest -q`. That uses `uv.lock` and the dev group (`pytest`, `httpx`). The image tag for this account is `me-central1-docker.pkg.dev/${PROJECT_ID}/apps/rag-api:${SHORT_SHA}`.
-3. **Create `rag-api-sa` and grant `roles/aiplatform.user`.** Then deploy:
+The first manual deploy also created Artifact Registry repo `cloud-run-source-deploy` in `me-central1`. The pipeline does not use it. Images go to `apps`.
 
-```bash
-PROJECT=trading-assistant-abdalla
-gcloud iam service-accounts create rag-api-sa --project "$PROJECT"
-gcloud projects add-iam-policy-binding "$PROJECT" \
-  --member="serviceAccount:rag-api-sa@${PROJECT}.iam.gserviceaccount.com" \
-  --role="roles/aiplatform.user"
-gcloud run deploy rag-api --source api --region me-central1 \
-  --service-account "rag-api-sa@${PROJECT}.iam.gserviceaccount.com" \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT}" \
-  --allow-unauthenticated
+## Request path
+
+```mermaid
+flowchart LR
+  caller[Caller] --> api[Cloud Run rag-api]
+  api --> gcs[GCS docs bucket]
+  api --> embed[gemini-embedding-001]
+  api --> gen[Gemini generate_content]
 ```
 
-`--source api` builds with Cloud Build from the Dockerfile. The uv image is fine for that path. After it is up: `gcloud run services describe`, read Cloud Logging, split traffic 90/10, and roll back. That practice is part of step 3.
+On startup, unless `PYTEST_CURRENT_TEST` is set, `load_bucket` lists `DOCS_BUCKET` (default `trading-assistant-abdalla-docs`), downloads each `.txt` and `.md` object, and calls `add_document`. A failure is logged and the process still serves `/health`. The index is a process-local list. A new instance, or scale above one, loads the bucket again. That is the demo store. For production, say pgvector on AlloyDB or Vertex AI Vector Search.
 
-4. **CI/CD is connected.** Triggers `rag-api-main` and `rag-api-dev` are in `me-central1`. The next push to `main` deploys `rag-api`. Create and push a `dev` branch to deploy `rag-api-dev`. The push that created `main` happened before the trigger existed, so it did not start a build.
-5. **Documents are in the bucket.** `gs://trading-assistant-abdalla-docs` in `me-central1` holds the four files in `api/sample-docs/`. Startup calls `load_bucket`. The running Cloud Run revision was built before this code, so redeploy before asking the live URL. Locally, restart uvicorn and ask about the Brent limit or CIF Fujairah.
-6. **Add `POST /v1/agent`.** Body `{ "question": string }`, call `run_agent`, return the text. Check with: “What is our USD exposure on a 500,000 barrel Brent cargo?” The model should call `get_price` then `calc_exposure`.
-7. **Replace the Vite starter with one page:** textarea, Ask button, answer, and the source list. `fetch(API_URL + "/v1/ask")`. Add CORS for that origin. Deploy the built site as a second Cloud Run service or as static files from FastAPI.
-8. **Declare Terraform variables and run `terraform plan`.** `project` and `image`. The brief does not require apply. Explain plan, apply, and remote state in a GCS bucket. Put each attribute on its own line.
-9. **Write `README.md`.** How to run, the architecture (CI/CD path and request path), and the decisions below.
+`POST /v1/ask` embeds the question, takes the top 4 chunks by cosine similarity, and asks Gemini to answer only from that text and to cite sources in brackets. The JSON `sources` field is every retrieved file, sorted, not only the file named in the answer. A blank question returns HTTP 422.
 
-Secret Manager is enabled and the Saturday schedule says to use it. The written deploy command only sets `GOOGLE_CLOUD_PROJECT` as an env var. Use Secret Manager if you put a credential there. The Vertex client on Cloud Run should keep using the service account, not a key.
+Chat model is `MODEL`, default `gemini-3.5-flash`, via the Vertex client in `location=global`. Confirm the model id in the Vertex model list before the interview. Embeddings use `gemini-embedding-001`.
+
+## Documents
+
+Copies live in `api/sample-docs/` and in the bucket:
+
+| Object | Fact to ask |
+| --- | --- |
+| `desk-policy.txt` | Brent limit is 50,000 barrels per trader and 200,000 for the desk. Hedge a cargo the same day if its mark-to-market loss exceeds $250,000. |
+| `incoterms-summary.txt` | Usual CIF grade is CIF Fujairah. The desk does not use DAP for crude. |
+| `commodity-glossary.txt` | A barrel is 42 US gallons. Laycan is the loading window. |
+| `crude-benchmarks.txt` | Cargo value is barrels times the benchmark price. The teaching example is 500,000 barrels at $80. |
+
+Verified on the live service after commit `0de5530`:
+
+```bash
+curl -s https://rag-api-431360356117.me-central1.run.app/v1/ask \
+  -H 'content-type: application/json' \
+  -d '{"question":"What is the Brent position limit per trader?"}'
+```
+
+Answer cited `desk-policy.txt` and said 50,000 barrels. `sources` also listed the other retrieved files. A question that is not in the notes, such as the gold price in Tokyo, should be answered with “I don’t know.” The first request after a cold start can take about 15 seconds while the four files are embedded.
+
+Pushing a new note to `main` deploys a new revision, which reloads the bucket. Upload the object before that revision starts, or the new instance indexes the bucket as it was at startup.
+
+## CI/CD path
+
+`cloudbuild.yaml` is the pipeline. A push to `main` runs it as `rag-api`. A push to `dev` runs the same file and deploys `rag-api-dev`.
+
+1. `uv run --frozen pytest -q` in `api/`, with `GOOGLE_CLOUD_PROJECT` set. The health test does not load the bucket.
+2. `docker build` of `api/` tagged `$SHORT_SHA`.
+3. Push to `apps`.
+4. `gcloud run deploy` of `_SERVICE` in `me-central1`, as `rag-api-sa`, with `GOOGLE_CLOUD_PROJECT` set, `--allow-unauthenticated`.
+
+There is no `dev` branch yet, so `rag-api-dev` has not been deployed.
+
+## Status against the brief
+
+| Step | State |
+| --- | --- |
+| 1. Project, APIs, Artifact Registry | Done in `me-central1`. Dammam is unavailable. |
+| 2. FastAPI, health test, container | Done. Packaging is uv (`pyproject.toml`, `uv.lock`), not `requirements.txt`. Image is `ghcr.io/astral-sh/uv`, non-root, listens on `$PORT`. |
+| 3. Cloud Run and `rag-api-sa` | Done. Public URL above. |
+| 4. Cloud Build triggers | Done for `main` and `dev`. Only `main` has been built. |
+| 5. React chat page and CORS | Not started. `web/` is the Vite starter. |
+| 6. RAG over Cloud Storage | Done. Four sample files, loaded at startup. |
+| 7. Agent route | `api/agent.py` matches the brief. `get_price` and `calc_exposure` are not exposed. No `POST /v1/agent`. ADK is not started. |
+| 8. Terraform plan | `infra/main.tf` matches the resources, with region `me-central1`. `var.project` and `var.image` are undeclared, so `terraform plan` fails. The bucket and Cloud Run service were created with `gcloud`, not Terraform. |
+| README | Empty. |
+
+## Still to do
+
+1. **`POST /v1/agent`.** Body `{ "question": string }`, return `run_agent`. Check with: “What is our USD exposure on a 500,000 barrel Brent cargo?” The model should call `get_price` then `calc_exposure`. The prices in `agent.py` are demo numbers. The desk policy says not to treat them as Platts or Argus.
+2. **Chat page.** Textarea, Ask, answer, and the source list. `fetch` to `/v1/ask`. CORS for that origin. Second Cloud Run service or static files from FastAPI.
+3. **`dev` branch.** Push it once so `rag-api-dev` exists.
+4. **Terraform variables** `project` and `image`, one attribute per line, then `terraform plan`. Apply is not required. Explain remote state in a GCS bucket.
+5. **README** with the URL, the two diagrams above, and the decisions below.
 
 ## Run locally
-
-From the repo root, `.env` already has:
-
-```bash
-GOOGLE_CLOUD_PROJECT=trading-assistant-abdalla
-MODEL=gemini-3.5-flash
-```
-
-Confirm `MODEL` in the Vertex model list before the interview. The brief’s default is `gemini-3.5-flash`. Auth:
 
 ```bash
 gcloud auth login && gcloud auth application-default login
 gcloud config set project trading-assistant-abdalla
-```
-
-API (uv, which this repo uses):
-
-```bash
 cd api
 uv sync
 uv run uvicorn main:app --reload --host 127.0.0.1 --port 8080
-curl -s http://127.0.0.1:8080/health
-uv run pytest
 ```
 
-`/v1/ask` needs documents in the process that is serving. A one-off `add_document` in another Python process does not fill the uvicorn process. Startup loading is the step 6 fix.
+`.env` at the repo root sets `GOOGLE_CLOUD_PROJECT` and `MODEL`. Startup reads the same bucket as Cloud Run, using your user credentials. `uv run pytest` only checks `/health` and skips the bucket.
 
-Agent, still in-process until the route exists:
+Until the agent route exists:
 
 ```bash
 cd api
 uv run python -c 'from agent import run_agent; print(run_agent("What is our USD exposure on a 500,000 barrel Brent cargo?"))'
 ```
 
-Web, starter only:
+## Decisions to say out loud
 
-```bash
-cd web && npm install && npm run dev
-```
-
-Container, from `api/`:
-
-```bash
-docker build -t rag-api .
-docker run --rm -p 8080:8080 \
-  -e GOOGLE_CLOUD_PROJECT=trading-assistant-abdalla \
-  -e MODEL=gemini-3.5-flash \
-  -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/adc.json \
-  -v "$HOME/.config/gcloud/application_default_credentials.json:/tmp/adc.json:ro" \
-  rag-api
-```
-
-Build with `--platform linux/amd64` when the image is the one Cloud Run will run.
-
-## Deploy
-
-Testing registry (this account):
-
-`me-central1-docker.pkg.dev/trading-assistant-abdalla/apps/rag-api`
-
-The `apps` repository is already in `me-central1`. Push there. The brief’s Dammam host, `me-central2-docker.pkg.dev/...`, stays closed until Google opens that region.
-
-Cloud Build file to put in `cloudbuild.yaml`. The test step uses the same uv image as `api/Dockerfile`:
-
-```yaml
-substitutions:
-  _REGION: me-central1
-  _IMAGE: me-central1-docker.pkg.dev/${PROJECT_ID}/apps/rag-api
-steps:
-  - id: test
-    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
-    dir: api
-    entrypoint: uv
-    args: ["run", "--frozen", "pytest", "-q"]
-  - id: build
-    name: gcr.io/cloud-builders/docker
-    args: ["build", "-t", "${_IMAGE}:${SHORT_SHA}", "api"]
-  - id: push
-    name: gcr.io/cloud-builders/docker
-    args: ["push", "${_IMAGE}:${SHORT_SHA}"]
-  - id: deploy
-    name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    entrypoint: gcloud
-    args:
-      ["run", "deploy", "rag-api", "--image", "${_IMAGE}:${SHORT_SHA}", "--region", "${_REGION}"]
-images: ["${_IMAGE}:${SHORT_SHA}"]
-```
-
-The deploy step also needs the service account and `GOOGLE_CLOUD_PROJECT`, or a revision will start and crash on import. Pass `--service-account rag-api-sa@${PROJECT_ID}.iam.gserviceaccount.com` and `--set-env-vars GOOGLE_CLOUD_PROJECT=${PROJECT_ID}`.
-
-Terraform stays a plan-only stretch. It does not replace the `gcloud run deploy` above until variables, the image, and IAM exist.
-
-## Decisions to be able to say
-
-These are the brief’s own follow-ups, not extra features.
-
-- **Chunk size.** 800 characters with 150 overlap keeps a boundary sentence in two chunks. Larger chunks mean fewer, coarser hits. Smaller chunks mean more embedding calls and weaker context.
-- **Cosine.** Vectors are divided by their length, so the dot product is cosine similarity. Rank by that and take four.
-- **“Say you don’t know.”** The prompt forbids answers that are not in the retrieved text. That is the hallucination control for this demo.
-- **Evals.** Ten questions with expected answers. Score whether the citation is a source that was actually retrieved.
-- **Production store.** Say pgvector on AlloyDB, or Vertex AI Vector Search / RAG Engine. The in-memory list is per instance. Cloud Run scale of 3, or scale to zero, drops or splits the index.
-- **Production controls, in one sentence.** IAP or SSO, pgvector or Vector Search, evals in the pipeline, Model Armor. The closing script in the brief is that sentence.
-- **Agent risk.** Both tools are read-only calculations on fake prices. Say that a write tool would need a human confirm step.
-- **Dockerfile talking points if you switch back to the brief’s image.** `USER 1000` so the process is not root, `$PORT` because Cloud Run injects it, slim base so cold start stays small. The uv image still does the first two. Be ready to say why packaging is uv.
+- **Chunk size.** 800 characters, step 650, overlap 150. Larger chunks are coarser. Smaller chunks cost more embeddings and carry less context.
+- **Cosine.** Each vector is divided by its length, so the dot product is cosine similarity. Keep the top 4.
+- **“Say you don’t know.”** The prompt forbids answers that are not in the retrieved text.
+- **Evals.** Ten questions with expected answers. Score whether the cited file was actually retrieved.
+- **Why the index is not shared.** It lives in the process. Scale-out and scale-to-zero rebuild it from the bucket. Production is pgvector or Vector Search.
+- **Production sentence.** IAP or SSO, pgvector or Vector Search, evals in the pipeline, Model Armor.
+- **Agent risk.** Both tools are read-only math on fake prices. A tool that could place or change a trade needs a human confirm step outside the model loop.
+- **Image.** `USER 1000` so the process is not root. `$PORT` because Cloud Run injects it. uv instead of a slim image plus `requirements.txt`, with the lockfile installed by `uv sync --frozen`.
