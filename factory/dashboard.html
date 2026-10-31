@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --text: #3d3832; --text-h: #1c1915; --muted: #6d645b;
+    --bg: #f6f1e8; --surface: #fffdf8; --column: #efe8dc; --border: #ddd4c6;
+    --pass: #1f6b47; --changes: #b3361f; --human: #b3361f; --human-bg: #fbe9e3;
+    --on-chip: #fffdf8;
+    --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --text: #e7e0d4; --text-h: #f6f1e8; --muted: #b7aea2;
+      --bg: #171512; --surface: #221e1a; --column: #1d1a16; --border: #3a342c;
+      --pass: #4fb286; --changes: #f0886f; --human: #f0886f; --human-bg: #3a211b;
+      --on-chip: #171512;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif; }
+  header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+  h1 { margin: 0; font-size: 18px; color: var(--text-h); }
+  #status { color: var(--muted); font-size: 12px; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--text-h); outline-offset: 2px; }
+
+  #alert { margin-bottom: 16px; padding: 10px 14px; border-radius: 8px;
+           background: var(--human-bg); color: var(--text-h); border: 1px solid var(--human); }
+  #alert code { font-family: var(--mono); font-size: 12px; }
+  #alert:empty { display: none; }
+
+  #board { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 10px;
+           overflow-x: auto; padding-bottom: 8px; }
+  .column { min-height: 60vh; padding: 10px; border-radius: 10px; background: var(--column); }
+  .column.alert { background: var(--human-bg); box-shadow: inset 0 0 0 1px var(--human); }
+  .column h2 { display: flex; justify-content: space-between; margin: 2px 4px 10px;
+               font-size: 12px; font-weight: 600; color: var(--muted); }
+  .column.alert h2 { color: var(--human); }
+
+  .card { display: block; width: 100%; margin-bottom: 8px; padding: 10px; text-align: left;
+          cursor: pointer; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .card:hover { border-color: var(--muted); }
+  .card.human { border: 2px solid var(--human); }
+  .id { font: 600 12px var(--mono); color: var(--text-h); overflow-wrap: anywhere; }
+  .feature { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+  .rounds { margin-top: 8px; }
+  .round { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+  .round b { width: 22px; font: 11px var(--mono); color: var(--muted); }
+  .chip { flex: 1; min-width: 0; padding: 1px 0; text-align: center; font: 600 10px var(--mono);
+          border-radius: 4px; border: 1px solid var(--border); color: var(--muted); }
+  .chip.PASS { background: var(--pass); border-color: var(--pass); color: var(--on-chip); }
+  .chip.CHANGES { background: var(--changes); border-color: var(--changes); color: var(--on-chip); }
+  .note { margin: 6px 0 0; color: var(--human); font-size: 12px; }
+  #empty { grid-column: 1 / -1; color: var(--muted); }
+
+  dialog { width: min(760px, 100vw); max-width: none; height: 100vh; max-height: none;
+           margin: 0 0 0 auto; padding: 0; border: 0; border-left: 1px solid var(--border);
+           background: var(--surface); color: var(--text); }
+  dialog::backdrop { background: rgb(0 0 0 / .35); }
+  .reader { display: grid; grid-template-rows: auto 1fr; grid-template-columns: 190px 1fr; height: 100%; }
+  .reader header { grid-column: 1 / -1; justify-content: space-between; margin: 0;
+                   padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  #close { padding: 2px 10px; cursor: pointer; background: none; border: 1px solid var(--border); border-radius: 6px; }
+  #files { padding: 8px; overflow-y: auto; border-right: 1px solid var(--border); }
+  #files button { display: block; width: 100%; padding: 4px 8px; text-align: left; cursor: pointer;
+                  font: 12px var(--mono); background: none; border: 0; border-radius: 6px; }
+  #files button[aria-current='true'] { background: var(--column); color: var(--text-h); }
+  #doc { padding: 16px 20px; overflow: auto; }
+  #doc h1, #doc h2, #doc h3 { margin: 16px 0 6px; font-size: 15px; color: var(--text-h); }
+  #doc pre { padding: 10px; overflow-x: auto; background: var(--column); border-radius: 6px; font: 12px var(--mono); }
+  #doc code { font: 12px var(--mono); }
+  #doc table { border-collapse: collapse; }
+  #doc td, #doc th { padding: 4px 8px; border: 1px solid var(--border); text-align: left; }
+</style>
+</head>
+<body>
+<header><h1>Software factory</h1><span id="status" role="status">Loading…</span></header>
+<div id="alert"></div>
+<main id="board"></main>
+
+<dialog id="reader" aria-labelledby="reader-title">
+  <div class="reader">
+    <header><span class="id" id="reader-title"></span><button id="close">Close</button></header>
+    <nav id="files" aria-label="Job files"></nav>
+    <article id="doc"></article>
+  </div>
+</dialog>
+
+<script>
+const STAGES = [
+  ['spec', 'Spec'], ['build', 'Build'], ['review', 'Review'],
+  ['decide', 'Decide'], ['merged', 'Merged'], ['needs-human', 'Needs human'],
+];
+const REVIEWERS = [['security', 'SEC'], ['ux', 'UX'], ['ui', 'UI'], ['code', 'CODE']];
+const MARK = { PASS: '✓', CHANGES: '✕' };
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+let raw = null, jobs = [], open = null, reading = 0;
+
+const chip = (review, [key, label]) => {
+  const verdict = review?.[key] ?? 'pending';
+  return `<span class="chip ${esc(verdict)}" title="${key}: ${esc(verdict)}">${label}${MARK[verdict] ? ' ' + MARK[verdict] : ''}</span>`;
+};
+
+function rounds(job) {
+  if (!job.round) return '';
+  const rows = [...(job.history ?? []), job.reviews];
+  return `<div class="rounds">${rows.map((review, i) =>
+    `<div class="round"><b>R${i + 1}</b>${REVIEWERS.map(r => chip(review, r)).join('')}</div>`).join('')}</div>`;
+}
+
+function card(job) {
+  const human = job.stage === 'needs-human';
+  return `<button class="card ${human ? 'human' : ''}" data-id="${esc(job.id)}">
+    <div class="id">${esc(job.id)}</div>
+    ${job.feature ? `<p class="feature">${esc(job.feature)}</p>` : ''}
+    ${rounds(job)}
+    ${human && job.note ? `<p class="note">${esc(job.note)}</p>` : ''}
+  </button>`;
+}
+
+function render() {
+  const before = new Map([...document.querySelectorAll('.card')].map(el => [el.dataset.id, el.getBoundingClientRect()]));
+  const known = new Set(STAGES.map(([key]) => key));
+  $('board').innerHTML = STAGES.map(([key, label]) => {
+    // a stage this page does not know still shows up, under Needs human
+    const here = jobs.filter(j => j.stage === key || (key === 'needs-human' && !known.has(j.stage)));
+    const alert = key === 'needs-human' && here.length ? 'alert' : '';
+    return `<section class="column ${alert}" aria-label="${label}">
+      <h2><span>${label}</span><span>${here.length || ''}</span></h2>${here.map(card).join('')}</section>`;
+  }).join('');
+
+  const stuck = jobs.filter(j => j.stage === 'needs-human');
+  $('alert').innerHTML = stuck.map(j =>
+    `<div><strong>${esc(j.id)} needs you.</strong> <code>/factory approve ${esc(j.id)}</code> or <code>/factory rework ${esc(j.id)} &lt;note&gt;</code></div>`).join('');
+
+  if (!reduced) document.querySelectorAll('.card').forEach(el => {
+    const from = before.get(el.dataset.id);
+    if (!from) return;
+    const to = el.getBoundingClientRect();
+    const [x, y] = [from.left - to.left, from.top - to.top];
+    if (x || y) el.animate([{ transform: `translate(${x}px, ${y}px)` }, { transform: 'none' }],
+      { duration: 400, easing: 'ease-in-out' });
+  });
+}
+
+function inline(text) {
+  return esc(text)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+}
+
+function markdown(source) {
+  const out = [];
+  const lines = source.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith('```')) {
+      const code = [];
+      while (++i < lines.length && !lines[i].startsWith('```')) code.push(lines[i]);
+      out.push(`<pre><code>${esc(code.join('\n'))}</code></pre>`);
+    } else if (/^#{1,3} /.test(line)) {
+      const level = line.indexOf(' ');
+      out.push(`<h${level}>${inline(line.slice(level + 1))}</h${level}>`);
+    } else if (/^\s*([-*]|\d+\.) /.test(line)) {
+      const items = [];
+      for (; i < lines.length && /^\s*([-*]|\d+\.) /.test(lines[i]); i++)
+        items.push(`<li>${inline(lines[i].replace(/^\s*([-*]|\d+\.) /, ''))}</li>`);
+      i--;
+      out.push(`<ul>${items.join('')}</ul>`);
+    } else if (line.trim().startsWith('|')) {
+      const rows = [];
+      for (; i < lines.length && lines[i].trim().startsWith('|'); i++)
+        if (!/^[\s|:-]+$/.test(lines[i])) rows.push(lines[i]);
+      i--;
+      out.push(`<table>${rows.map(row => `<tr>${row.trim().replace(/^\||\|$/g, '').split('|')
+        .map(cell => `<td>${inline(cell.trim())}</td>`).join('')}</tr>`).join('')}</table>`);
+    } else if (line.trim()) {
+      out.push(`<p>${inline(line)}</p>`);
+    }
+  }
+  return out.join('');
+}
+
+function paths(job) {
+  const list = ['spec.md', 'build.md'];
+  for (let n = 1; n <= (job.round ?? 0); n++)
+    for (const name of ['security', 'ux', 'ui', 'code', 'human']) list.push(`round-${n}/${name}.md`);
+  return [...list, 'decision.md'];
+}
+
+async function load(job) {
+  const ticket = ++reading;
+  const base = `jobs/${encodeURIComponent(job.id)}/`;
+  const found = await Promise.all(paths(job).map(async path => {
+    const res = await fetch(base + path, { cache: 'no-store' }).catch(() => null);
+    return res?.ok ? [path, await res.text()] : null;
+  }));
+  if (ticket !== reading) return;
+  const files = found.filter(Boolean);
+  if (!open?.file || !files.some(([path]) => path === open.file)) open.file = files.at(-1)?.[0];
+  $('files').innerHTML = files.map(([path]) =>
+    `<button data-file="${esc(path)}" aria-current="${path === open.file}">${esc(path)}</button>`).join('');
+  $('doc').innerHTML = files.length
+    ? markdown(files.find(([path]) => path === open.file)[1])
+    : '<p>No files for this job yet.</p>';
+}
+
+function show(id) {
+  const job = jobs.find(j => j.id === id);
+  if (!job) return;
+  open = { id };
+  $('reader-title').textContent = id;
+  $('files').innerHTML = $('doc').innerHTML = '';
+  $('reader').showModal();
+  load(job);
+}
+
+async function poll() {
+  try {
+    const res = await fetch('board.json', { cache: 'no-store' });
+    const text = res.status === 404 ? '{ "jobs": [] }' : await res.text();
+    if (text !== raw) {
+      // a half-written file fails to parse here, and the last good board stays up
+      jobs = JSON.parse(text).jobs ?? [];
+      raw = text;
+      render();
+      if (open) {
+        const job = jobs.find(j => j.id === open.id);
+        if (job) load(job);
+      }
+      if (!jobs.length) $('board').insertAdjacentHTML('afterbegin', '<p id="empty">No jobs yet. Run <code>/factory &lt;feature&gt;</code> in Claude Code.</p>');
+    }
+    $('status').textContent = `Live, ${jobs.length} job${jobs.length === 1 ? '' : 's'}`;
+  } catch {
+    $('status').textContent = location.protocol === 'file:'
+      ? 'Serve this folder: python3 -m http.server'
+      : 'Cannot read board.json, retrying';
+  }
+}
+
+$('board').addEventListener('click', e => {
+  const target = e.target.closest('.card');
+  if (target) show(target.dataset.id);
+});
+$('files').addEventListener('click', e => {
+  const file = e.target.dataset.file;
+  if (!file) return;
+  open.file = file;
+  load(jobs.find(j => j.id === open.id));
+});
+$('close').addEventListener('click', () => $('reader').close());
+$('reader').addEventListener('click', e => { if (e.target === $('reader')) $('reader').close(); });
+$('reader').addEventListener('close', () => { open = null; reading++; });
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

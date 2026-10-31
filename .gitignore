@@ -6,3 +6,6 @@ __pycache__/
 .terraform/
 *.tfstate
 *.tfstate.*
+.worktrees/
+factory/board.json
+factory/jobs/
