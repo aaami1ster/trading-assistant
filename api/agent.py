@@ -12,9 +12,15 @@ def calc_exposure(volume_bbl: float, price: float) -> dict:
     """Return USD exposure for a volume in barrels at a price."""
     return {"usd": volume_bbl * price}
 
-def run_agent(question: str) -> str:
+def run_agent(question: str, language: str = "en") -> str:
+    reply = "Arabic" if language == "ar" else "English"
+    prompt = (
+        f"Answer in {reply}. Use the tools for prices and exposure. "
+        "Benchmark names for the tools are brent, wti, and dubai.\n\n"
+        f"Question: {question}"
+    )
     resp = client.models.generate_content(
-        model=MODEL, contents=question,
+        model=MODEL, contents=prompt,
         config=types.GenerateContentConfig(tools=[get_price, calc_exposure]),
     )  # the SDK runs the functions automatically and loops
     return resp.text

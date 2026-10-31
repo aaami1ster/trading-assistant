@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Trading Desk Assistant</title>
+    <script>
+      ;(function () {
+        var theme = localStorage.getItem('desk-theme')
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+        var lang = localStorage.getItem('desk-lang') === 'ar' ? 'ar' : 'en'
+        var root = document.documentElement
+        root.dataset.theme = theme
+        root.lang = lang
+        root.dir = lang === 'ar' ? 'rtl' : 'ltr'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,0 +1,29 @@
+Trading Desk Assistant — third-party assets
+
+Fonts are self-hosted from the @fontsource packages. Icons come from lucide-react.
+Each license below was checked against the package LICENSE file and the upstream project.
+
+Inter
+  License: SIL Open Font License 1.1
+  Copyright: 2016 The Inter Project Authors (https://github.com/rsms/inter)
+  Text: inter-OFL.txt
+
+IBM Plex Sans Arabic
+  License: SIL Open Font License 1.1
+  Copyright: 2019 IBM Corp. Reserved Font Name "Plex"
+  Text: ibm-plex-sans-arabic-OFL.txt
+
+Noto Naskh Arabic
+  License: SIL Open Font License 1.1
+  Copyright: 2022 The Noto Project Authors (https://github.com/notofonts/arabic)
+  Text: noto-naskh-arabic-OFL.txt
+
+JetBrains Mono
+  License: SIL Open Font License 1.1
+  Copyright: 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+  Text: jetbrains-mono-OFL.txt
+
+Lucide
+  License: ISC. Icons derived from Feather are MIT.
+  Copyright: Lucide Icons and Contributors; Feather portions Cole Bemis
+  Text: lucide-ISC.txt

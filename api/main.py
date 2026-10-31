@@ -3,6 +3,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -45,6 +46,7 @@ MODEL = os.getenv("MODEL", "gemini-3.5-flash")  # check exact ID in the model li
 
 class AskIn(BaseModel):
     question: str
+    language: Literal["en", "ar"] = "en"
 
 class AskOut(BaseModel):
     answer: str
@@ -64,8 +66,10 @@ def ask(body: AskIn):
     from rag import retrieve
     chunks = retrieve(body.question, k=4)
     context = "\n\n".join(f"[{c['source']}] {c['text']}" for c in chunks)
+    reply = "Arabic" if body.language == "ar" else "English"
     prompt = ("Answer only from the context. Cite sources in brackets. "
-              "If the answer is not in the context, say you don't know.\n\n"
+              "If the answer is not in the context, say you don't know. "
+              f"Write the answer in {reply}. Keep citation filenames unchanged.\n\n"
               f"Context:\n{context}\n\nQuestion: {body.question}")
     resp = client.models.generate_content(model=MODEL, contents=prompt)
     return AskOut(answer=resp.text, sources=sorted({c["source"] for c in chunks}))
@@ -75,4 +79,4 @@ def ask_agent(body: AskIn):
     if not body.question.strip():
         raise HTTPException(422, "empty question")
     from agent import run_agent
-    return AgentOut(answer=run_agent(body.question))
+    return AgentOut(answer=run_agent(body.question, body.language))

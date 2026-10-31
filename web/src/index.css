@@ -1,23 +1,40 @@
-:root {
+:root,
+[data-theme='light'] {
+  color-scheme: light;
   --text: #3d3832;
   --text-h: #1c1915;
   --bg: #f6f1e8;
+  --surface: #fffdf8;
   --border: #ddd4c6;
-  --code-bg: #fffdf8;
-  --sans: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  color: var(--text);
-  background: var(--bg);
-  font: 18px/1.5 var(--sans);
+  --accent: #8a5a2b;
+  --chip: #1f3a2e;
+  --chip-text: #f4efe6;
+  --error: #9b2c2c;
+  --muted: #6d645b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #e7e0d4;
-    --text-h: #f6f1e8;
-    --bg: #171512;
-    --border: #3a342c;
-    --code-bg: #221e1a;
-  }
+[data-theme='dark'] {
+  color-scheme: dark;
+  --text: #e7e0d4;
+  --text-h: #f6f1e8;
+  --bg: #171512;
+  --surface: #221e1a;
+  --border: #3a342c;
+  --accent: #e0b080;
+  --chip: #3d6b52;
+  --chip-text: #f6f1e8;
+  --error: #f0b4b4;
+  --muted: #b7aea2;
+}
+
+:root {
+  color: var(--text);
+  background: var(--bg);
+  font: 18px/1.5 Inter, 'IBM Plex Sans Arabic', sans-serif;
+}
+
+html[lang='ar'] {
+  font-family: 'IBM Plex Sans Arabic', Inter, sans-serif;
 }
 
 body {
@@ -27,4 +44,11 @@ body {
 button,
 textarea {
   font: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
