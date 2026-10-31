@@ -10,8 +10,8 @@ Definition of done in the brief: a FastAPI + React app on Cloud Run that answers
 | --- | --- | --- |
 | 1. Setup | Project, APIs, Artifact Registry `apps` in `me-central2` | Project exists. APIs are enabled. Testing region is **`me-central1`** (Doha): this account cannot create resources in `me-central2`. Docker repo `apps` is already there. |
 | 2. FastAPI | `main.py`, health test, slim Dockerfile, `requirements.txt` | `main.py` and `tests/test_api.py` match the brief, plus dotenv loading. Packaging is uv (`pyproject.toml`, `uv.lock`). The image is `ghcr.io/astral-sh/uv`, still non-root, and still uses `$PORT`. |
-| 3. Cloud Run | Service account `rag-api-sa`, `roles/aiplatform.user`, `gcloud run deploy rag-api` | Not deployed. The only service account is the default compute account. No Cloud Run service. |
-| 4. CI/CD | `cloudbuild.yaml`: test → build → push → deploy. Trigger on `main`. Second trigger for `rag-api-dev`. | `cloudbuild.yaml` is an empty file. No triggers. |
+| 3. Cloud Run | Service account `rag-api-sa`, `roles/aiplatform.user`, `gcloud run deploy rag-api` | Deployed. `rag-api-sa` has `roles/aiplatform.user`. Service URL `https://rag-api-431360356117.me-central1.run.app`. |
+| 4. CI/CD | `cloudbuild.yaml`: test → build → push → deploy. Trigger on `main`. Second trigger for `rag-api-dev`. | `cloudbuild.yaml` tests with uv and deploys `${_SERVICE}` (default `rag-api`). Cloud Build SA has `roles/run.admin` and `roles/iam.serviceAccountUser`. Triggers `rag-api-main` (`^main$`) and `rag-api-dev` (`^dev$`, `_SERVICE=rag-api-dev`) are in `me-central1` on connection `trading-assistant-connection`. |
 | 5. React | One chat page: question, answer, sources. CORS. Second Cloud Run service or static files. | `web/` is the Vite starter. No ask UI, no CORS, not deployed. |
 | 6. RAG | `rag.py` as written, plus load 3–5 docs from the bucket at startup | `rag.py` matches the snippet. Nothing calls `add_document`. No docs, no bucket, no startup load. `google-cloud-storage` is a dependency and is unused. |
 | 7. Agent | `agent.py` as written, exposed as `POST /v1/agent` | `agent.py` matches. No route. ADK is a stretch and is not started. |
@@ -42,7 +42,7 @@ gcloud run deploy rag-api --source api --region me-central1 \
 
 `--source api` builds with Cloud Build from the Dockerfile. The uv image is fine for that path. After it is up: `gcloud run services describe`, read Cloud Logging, split traffic 90/10, and roll back. That practice is part of step 3.
 
-4. **Fill `cloudbuild.yaml` and connect a trigger on `main`.** Grant the Cloud Build service account `roles/run.admin` and `roles/iam.serviceAccountUser`. Add a second trigger on a `dev` branch that deploys `rag-api-dev`.
+4. **CI/CD is connected.** Triggers `rag-api-main` and `rag-api-dev` are in `me-central1`. The next push to `main` deploys `rag-api`. Create and push a `dev` branch to deploy `rag-api-dev`. The push that created `main` happened before the trigger existed, so it did not start a build.
 5. **Load documents at startup.** Bucket name from Terraform is `trading-assistant-abdalla-docs` in `ME-CENTRAL1`. Put 3–5 text files in it (a commodity glossary, an Incoterms summary, a made-up desk policy). On FastAPI startup, list the bucket with `google-cloud-storage` and call `add_document`. Until that exists, `/v1/ask` retrieves from an empty list and the model is told to say it does not know.
 6. **Add `POST /v1/agent`.** Body `{ "question": string }`, call `run_agent`, return the text. Check with: “What is our USD exposure on a 500,000 barrel Brent cargo?” The model should call `get_price` then `calc_exposure`.
 7. **Replace the Vite starter with one page:** textarea, Ask button, answer, and the source list. `fetch(API_URL + "/v1/ask")`. Add CORS for that origin. Deploy the built site as a second Cloud Run service or as static files from FastAPI.
