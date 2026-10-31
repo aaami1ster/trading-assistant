@@ -1,0 +1,26 @@
+[project]
+name = "trading-desk-assistant"
+version = "0.1.0"
+description = "Trading Desk Assistant API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.162.0",
+    "google-cloud-storage>=3.17.1",
+    "google-genai>=2.34.0",
+    "numpy>=2.5.4",
+    "pydantic>=2.14.2",
+    "python-dotenv>=1.2.4",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

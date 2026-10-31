@@ -1,0 +1,38 @@
+substitutions:
+  _REGION: me-central1
+  _SERVICE: rag-api
+  _IMAGE: me-central1-docker.pkg.dev/${PROJECT_ID}/apps/rag-api
+steps:
+  - id: test
+    name: ghcr.io/astral-sh/uv:python3.12-bookworm-slim
+    dir: api
+    entrypoint: uv
+    args: ["run", "--frozen", "pytest", "-q"]
+    env:
+      - GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "${_IMAGE}:${SHORT_SHA}", "api"]
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: ["push", "${_IMAGE}:${SHORT_SHA}"]
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image
+      - ${_IMAGE}:${SHORT_SHA}
+      - --region
+      - ${_REGION}
+      - --service-account
+      - rag-api-sa@${PROJECT_ID}.iam.gserviceaccount.com
+      - --set-env-vars
+      - GOOGLE_CLOUD_PROJECT=${PROJECT_ID}
+      - --allow-unauthenticated
+images:
+  - ${_IMAGE}:${SHORT_SHA}
+options:
+  logging: CLOUD_LOGGING_ONLY
